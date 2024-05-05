@@ -1,0 +1,259 @@
+*****************************************************************************************
+*********************************************************************************************
+kubens : list all namespaces
+  kubectl get ns/namespaces : list all namespaces
+  kubens <namespace>: set default namespace
+  ex: kubens dev
+
+pod:
+  commands:
+    kubectl run <name of pod> --image=<image name>
+    ex. kubectl run nginx --image=nginx:latest 
+    kubectl get pods 
+    kubectl get pods --all-namespaces
+    kubectl get pods -A 
+    kubectl delete pod <pod name> 
+    ex. kubectl delete pod nginx
+    kubectl describe pod nginx
+    kubectl logs <podname>
+    kubectl exec -it <podname> -- /bin/bash
+    kubectl exec -it static-web-server -c nginx -- bash
+
+  States:
+    - Pending  
+    - Running
+    - Succeeded
+    - Failed
+---
+  manifest: > 
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: static-web-server
+      labels:
+        app: pod-app
+        env: dev
+    spec:
+      containers:
+        - name: nginx
+          image: nginx
+          ports:
+            - name: nginx
+              containerPort: 80
+          resources: 
+            requests: 
+              cpu: "100m"
+              memory: "256Mi"    
+              
+---  
+
+manifest-cmd:
+  - kubectl create -f pod.yml
+  - kubectl apply -f pod.yml
+  - kubectl delete -f pod.yml
+
+*****************************************************************************************
+dockerfile:>
+
+FROM nginx:latest
+LABEL application="home"
+RUN echo "<h1>Welcome to Home Page Of Our Application</h1>" > /usr/share/nginx/html/index.html
+
+FROM nginx:latest
+LABEL application="laptop"
+RUN mkdir -p /usr/share/nginx/html/laptop
+RUN echo "<h1>Welcome to Laptop Page Of Our Application</h1>" > /usr/share/nginx/html/laptop/index.html
+
+FROM nginx:latest
+LABEL application="mobile"
+RUN mkdir -p /usr/share/nginx/html/mobile
+RUN echo "<h1>Welcome to Mobile Page Of Our Application</h1>" > /usr/share/nginx/html/mobile/index.html
+*****************************************************************************************
+
+DEPLOYMENT::-->>
+ 
+ (For Home)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dev
+  labels:
+    name: dev
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: home-deployment
+  namespace: dev
+  labels:
+    app: home
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: home
+  template:
+    metadata:
+      labels:
+        app: home
+    spec:
+      containers:
+      - name: app
+        image: 824788246352.dkr.ecr.eu-north-1.amazonaws.com/home:latest
+        ports:
+          - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: home-srv
+  namespace: dev   
+spec:
+  type: ClusterIP
+  selector:
+    app: home           
+  ports:
+    - protocol: TCP
+      port: 80                      
+      targetPort: 80
+---      
+kubectl rollout history deployment nginx-deployment
+kubectl rollout undo deployment nginx-deployment
+
+
+
+
+aws eks update-kubeconfig --region eu-north-1 --name Application1
+
+
+
+my-service.prod.svc.cluster.local
+<servicename>.<namespace>.svc.cluster.local
+nginx.dev.svc.cluster.local
+
+************************************************************8
+(For Mobile)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dev
+  labels:
+    name: dev
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-deployment
+  namespace: dev
+  labels:
+    app: mobile
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mobile
+  template:
+    metadata:
+      labels:
+        app: mobile
+    spec:
+      containers:
+      - name: mobile
+        image: 058264287517.dkr.ecr.ap-south-1.amazonaws.com/mobile:latest
+        ports:
+          - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobile-srv
+  namespace: dev   
+spec:
+  type: ClusterIP
+  selector:
+    app: mobile           
+  ports:
+    - protocol: TCP
+      port: 80                      
+      targetPort: 80
+---      
+aws eks update-kubeconfig --region ap-south-1 --name gamma-dev-cluster
+
+
+
+my-service.prod.svc.cluster.local
+<servicename>.<namespace>.svc.cluster.local
+nginx.dev.svc.cluster.local
+  *****************************************************************************************
+  ingress: >
+  ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: dev
+  name: rambo-ingress
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  ingressClassName: alb
+  rules:
+  - http:
+        paths:
+          - path: /laptop/
+            pathType: Prefix
+            backend:
+              service:
+                name: laptop-srv
+                port:
+                  number: 80
+
+          - path: /mobile/
+            pathType: Prefix
+            backend:
+              service:
+                name: mobile-srv
+                port:
+                  number: 80
+
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: home-srv
+                port:
+                  number: 80
+*********************************************************************************************
+HPA:-->
+type: ContainerResource
+containerResource:
+  name: cpu
+  container: application
+  target:
+    type: Utilization
+    averageUtilization: 60
+
+
+*****************************************************************************************
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: home-deployment                                #deployment ka nam jisme pods hai hamare
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu/memory 
+      target:
+        type: Utilization
+        averageUtilization: 50
