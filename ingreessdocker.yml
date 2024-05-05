@@ -228,17 +228,12 @@ spec:
                 port:
                   number: 80
 *********************************************************************************************
-HPA:-->
-type: ContainerResource
-containerResource:
-  name: cpu
-  container: application
-  target:
-    type: Utilization
-    averageUtilization: 60
 
 
 *****************************************************************************************
+
+HPA:-->
+
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
